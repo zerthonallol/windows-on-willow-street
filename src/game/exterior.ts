@@ -37,6 +37,14 @@ function mat(lite: boolean, p: Record<string, unknown>) {
   return new THREE.MeshStandardMaterial({ roughness: 0.85, ...p });
 }
 
+/** Dimly self-lit exterior surface: at night the city glow keeps facades and ground faintly readable. */
+function nightMat(lite: boolean, p: Record<string, unknown>, glow: number, tint = "#ffffff") {
+  const m = mat(lite, p) as THREE.MeshStandardMaterial;
+  m.emissive = new THREE.Color(tint).multiplyScalar(glow);
+  if (p["map"]) m.emissiveMap = p["map"] as THREE.Texture;
+  return m;
+}
+
 function boxGeo(w: number, h: number, d: number, x: number, y: number, z: number, ry = 0) {
   const g = new THREE.BoxGeometry(w, h, d);
   if (ry) g.rotateY(ry);
@@ -174,12 +182,12 @@ export function createKit(lite: boolean): Kit {
   return {
     lite, glow, bay, litWin, leaf, bark, dirt, pave,
     glowMats: new Map(), poolMats: new Map(),
-    concrete: mat(lite, { color: "#7a7871", roughness: 0.95 }),
-    roof: mat(lite, { color: "#3a3936", roughness: 1 }),
+    concrete: nightMat(lite, { color: "#7a7871", roughness: 0.95 }, 0.07),
+    roof: nightMat(lite, { color: "#3a3936", roughness: 1 }, 0.04),
     metal: mat(lite, { color: "#59605e", metalness: 0.5, roughness: 0.5 }),
     darkMetal: mat(lite, { color: "#25292a", metalness: 0.4, roughness: 0.6 }),
     wood: mat(lite, { color: "#5a4330", roughness: 0.9 }),
-    asphalt: lite ? new THREE.MeshLambertMaterial({ color: "#1c2024" }) : new THREE.MeshStandardMaterial({ color: "#15181b", roughness: 0.22, metalness: 0.35 }),
+    asphalt: lite ? new THREE.MeshLambertMaterial({ color: "#1c2024", emissive: "#0b0c0e" }) : new THREE.MeshStandardMaterial({ color: "#15181b", roughness: 0.22, metalness: 0.35, emissive: "#0a0b0d" }),
   };
 }
 
@@ -218,7 +226,7 @@ float noise(vec2 p){
   vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
   return mix(mix(hash2(i), hash2(i+vec2(1,0)), f.x), mix(hash2(i+vec2(0,1)), hash2(i+vec2(1,1)), f.x), f.y);
 }
-float fbm(vec2 p){ float v=0.0, a=0.5; for(int i=0;i<4;i++){ v+=a*noise(p); p*=2.07; a*=0.5; } return v; }
+float fbm(vec2 p){ float v=0.0, a=0.5; for(int i=0;i<OCTAVES;i++){ v+=a*noise(p); p*=2.07; a*=0.5; } return v; }
 void main(){
   vec3 d = normalize(vDir);
   float h = d.y;
@@ -236,9 +244,9 @@ void main(){
   #include <colorspace_fragment>
 }`;
 /** Overcast storm sky lit orange from below by the city. Keep its position on the camera. */
-export function createStormSky() {
+export function createStormSky(lite = false) {
   const uniforms = { uTime: { value: 0 }, uFlash: { value: 0 } };
-  const m = new THREE.ShaderMaterial({ uniforms, vertexShader: skyVert, fragmentShader: skyFrag, side: THREE.BackSide, depthWrite: false, fog: false });
+  const m = new THREE.ShaderMaterial({ uniforms, vertexShader: skyVert, fragmentShader: skyFrag, side: THREE.BackSide, depthWrite: false, fog: false, defines: { OCTAVES: lite ? 2 : 4 } });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(300, 32, 16), m);
   mesh.frustumCulled = false;
   mesh.renderOrder = -1;
@@ -354,9 +362,9 @@ export function buildTrees(specs: TreeSpec[], lite: boolean, kit: Kit) {
     mesh.frustumCulled = false;
     group.add(mesh);
   };
-  add(bark, mat(lite, { map: kit.bark, vertexColors: true, roughness: 0.95 }), false);
-  add(leaves, mat(lite, { map: kit.leaf, vertexColors: true, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.9 }), true);
-  add(needles, mat(lite, { color: "#ffffff", vertexColors: true, roughness: 1 }), false);
+  add(bark, nightMat(lite, { map: kit.bark, vertexColors: true, roughness: 0.95 }, 0.06), false);
+  add(leaves, nightMat(lite, { map: kit.leaf, vertexColors: true, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.9 }, 0.2, "#8a5a1c"), true);
+  add(needles, nightMat(lite, { color: "#ffffff", vertexColors: true, roughness: 1 }, 0.05, "#2a4a2e"), false);
   return group;
 }
 
@@ -386,7 +394,7 @@ export function buildBlock(kit: Kit, o: BlockOpts): Block {
   const bwL = o.len / lenBays, bwD = o.depth / depBays;
   const face = (bays: number) => {
     const t = kit.bay.clone(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(bays, o.floors); t.needsUpdate = true;
-    return mat(kit.lite, { map: t, roughness: 0.95 });
+    return nightMat(kit.lite, { map: t, roughness: 0.95 }, 0.11, "#ffe2c4");
   };
   const side = face(depBays), front = face(lenBays);
   const body = new THREE.Mesh(new THREE.BoxGeometry(o.len, H, o.depth), [side, side, kit.roof, kit.roof, front, front]);
@@ -723,7 +731,7 @@ void main(){
   w.y = uCenter.y + y;
   vec4 mv = viewMatrix * vec4(w, 1.0);
   gl_Position = projectionMatrix * mv;
-  gl_PointSize = (90.0 + aRnd.x * 60.0) / -mv.z;
+  gl_PointSize = (26.0 + aRnd.x * 18.0) / -mv.z;
   vCol = mix(vec3(0.55,0.32,0.08), vec3(0.62,0.5,0.12), aRnd.y);
   vRot = t * 3.0 + aRnd.z * 6.28;
 }`;
@@ -748,7 +756,7 @@ export function createFallingLeaves(count: number, size: number, height: number)
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   g.setAttribute("aRnd", new THREE.BufferAttribute(rnd, 3));
-  const uniforms = { uTime: wind.uTime, uWind: wind.uWind, uCenter: { value: new THREE.Vector3() }, uSize: { value: size }, uHeight: { value: height }, uLight: { value: 0.35 } };
+  const uniforms = { uTime: wind.uTime, uWind: wind.uWind, uCenter: { value: new THREE.Vector3() }, uSize: { value: size }, uHeight: { value: height }, uLight: { value: 0.2 } };
   const m = new THREE.ShaderMaterial({ uniforms, vertexShader: leafVert, fragmentShader: leafFrag });
   const mesh = new THREE.Points(g, m);
   mesh.frustumCulled = false;
@@ -799,17 +807,18 @@ export function buildYardView(lite: boolean, G: number, kit = createKit(lite)): 
   const beacons: THREE.Mesh[] = [];
   // ground, sidewalk, driveways and footpaths
   kit.dirt.repeat.set(40, 40);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), mat(lite, { map: kit.dirt, roughness: 1 }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), nightMat(lite, { map: kit.dirt, roughness: 1 }, 0.3, "#d8c0a0"));
   ground.rotation.x = -Math.PI / 2; ground.position.set(5, G, -70); g.add(ground);
-  const paveMat = mat(lite, { map: kit.pave, color: "#8a8a88", roughness: 0.7 });
+  const paveMat = nightMat(lite, { map: kit.pave, color: "#8a8a88", roughness: 0.7 }, 0.12);
   kit.pave.repeat.set(60, 2);
   g.add(new THREE.Mesh(boxGeo(130, 0.14, 2.6, 5, G, -1.3), paveMat));
   const drive = (z: number, w: number) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(150, w), kit.asphalt); m.rotation.x = -Math.PI / 2; m.position.set(5, G + 0.02, z); g.add(m); };
-  drive(-5.8, 6.4); drive(-33, 5.5);
-  for (const z of [-2.6, -9.0, -30.25, -35.75]) g.add(new THREE.Mesh(boxGeo(150, 0.16, 0.18, 5, G, z), kit.concrete));
+  drive(-5.8, 6.4); drive(-50, 5.5);
+  for (const z of [-2.6, -9.0, -47.25, -52.75]) g.add(new THREE.Mesh(boxGeo(150, 0.16, 0.18, 5, G, z), kit.concrete));
   const path = mat(lite, { color: "#4c4a44", roughness: 0.9 });
   const fp = new THREE.Mesh(new THREE.PlaneGeometry(90, 1.6), path); fp.rotation.x = -Math.PI / 2; fp.position.set(5, G + 0.025, -13.6); g.add(fp);
-  const fp2 = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 17), path); fp2.rotation.x = -Math.PI / 2; fp2.position.set(-10, G + 0.025, -21.5); g.add(fp2);
+  const fp2 = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 33), path); fp2.rotation.x = -Math.PI / 2; fp2.position.set(-10, G + 0.025, -30); g.add(fp2);
+  const fp3 = new THREE.Mesh(new THREE.PlaneGeometry(90, 1.6), path); fp3.rotation.x = -Math.PI / 2; fp3.position.set(5, G + 0.025, -45.5); g.add(fp3);
   // our building's facade below the windows (the wall we look down along)
   // Thin shell, rotated so its front (entrances) faces the yard; it tops out just under our floor.
   const ownBlock = buildBlock(kit, { len: 96, depth: 1, floors: 6, floorH: 2.7, seed: 7, lit: 0.3, entrances: [25, 0.5, -24], balconies: 0, roof: false });
@@ -832,8 +841,9 @@ export function buildYardView(lite: boolean, G: number, kit = createKit(lite)): 
     { x: 10.4, y: G, z: -11.8, h: 16.8, kind: "poplar", seed: 12 },
   ];
   for (let x = -34; x < 46; x += 6 + r() * 3) if (Math.abs(x - 1.2) > 3 && Math.abs(x - 10.4) > 3) trees.push({ x, y: G, z: -10.6 - r() * 1.5, h: 9 + r() * 4, kind: r() < 0.7 ? "birch" : "maple", seed: Math.floor(r() * 1e9) });
-  scatterTrees(trees, r, 14, -36, -12, -15, -29, G, ["maple", "birch", "poplar"], 8, 15);
-  scatterTrees(trees, r, 10, 16, 48, -15, -29, G, ["maple", "birch", "poplar"], 8, 15);
+  scatterTrees(trees, r, 16, -36, -12, -15, -44, G, ["maple", "birch", "poplar"], 8, 15);
+  scatterTrees(trees, r, 8, 16, 48, -28, -44, G, ["maple", "birch", "poplar"], 8, 15);
+  scatterTrees(trees, r, 6, -5, 14, -31, -44, G, ["maple", "birch"], 8, 13);
   trees.push({ x: -6.5, y: G, z: -27, h: 9, kind: "spruce", seed: 3 }, { x: 13.5, y: G, z: -26.5, h: 7.5, kind: "spruce", seed: 4 }, { x: -8, y: G, z: -18, h: 6.5, kind: "spruce", seed: 5 });
   g.add(buildTrees(trees, lite, kit));
   // playground, garbage corner, garages
@@ -841,16 +851,17 @@ export function buildYardView(lite: boolean, G: number, kit = createKit(lite)): 
   const gb = buildGarbage(kit, lite); gb.position.set(-20, G, -15.5); g.add(gb);
   const gar = buildGarages(kit, lite, 8, 44); gar.position.set(26, G, -24); g.add(gar);
   [-3, 22].forEach((x) => { const lamp = buildLamp(kit, x, G, -16.5, -Math.PI / 2, 5.2); g.add(lamp); });
+  [-24, -4, 16, 36].forEach((x) => g.add(buildLamp(kit, x, G, -46.6, Math.PI / 2, 5.6)));
   // the block across the yard and the city behind it
   const opp = buildBlock(kit, { len: 100, depth: 12, floors: 9, seed: 21, lit: 0.27, entrances: [-36, -12, 12, 36] });
-  opp.group.position.set(6, G + 0.6, -42.5); g.add(opp.group); life.add(opp);
-  for (const x of [-36, -12, 12, 36]) for (const dx of [-7, 7]) { const c = buildCar(lite, cols[Math.floor(r() * cols.length)]); for (const s of c.headlights) { s.parent?.remove(s); s.target.parent?.remove(s.target); } c.group.position.set(6 + x + dx + r(), G + 0.02, -34.2); c.group.rotation.y = Math.PI / 2; if (r() < 0.6) g.add(c.group); }
+  opp.group.position.set(6, G + 0.6, -60); g.add(opp.group); life.add(opp);
+  for (const x of [-36, -12, 12, 36]) for (const dx of [-7, 7]) { const c = buildCar(lite, cols[Math.floor(r() * cols.length)]); for (const s of c.headlights) { s.parent?.remove(s); s.target.parent?.remove(s.target); } c.group.position.set(6 + x + dx + r(), G + 0.02, -51.4); c.group.rotation.y = Math.PI / 2; if (r() < 0.6) g.add(c.group); }
   const far = [
-    { x: -20, z: -100, len: 70, floors: 14, seed: 31, ry: 0 },
-    { x: 60, z: -95, len: 60, floors: 16, seed: 32, ry: 0.15 },
-    { x: 95, z: -50, len: 60, floors: 9, seed: 33, ry: Math.PI / 2 },
-    { x: -85, z: -55, len: 60, floors: 12, seed: 34, ry: -Math.PI / 2 },
-    { x: 20, z: -150, len: 90, floors: 12, seed: 35, ry: 0 },
+    { x: -25, z: -115, len: 70, floors: 14, seed: 31, ry: 0 },
+    { x: 62, z: -110, len: 60, floors: 16, seed: 32, ry: 0.15 },
+    { x: 95, z: -45, len: 60, floors: 9, seed: 33, ry: Math.PI / 2 },
+    { x: -85, z: -50, len: 60, floors: 12, seed: 34, ry: -Math.PI / 2 },
+    { x: 20, z: -165, len: 90, floors: 12, seed: 35, ry: 0 },
   ];
   for (const f of far) {
     const b = buildBlock(kit, { len: f.len, depth: 12, floors: f.floors, seed: f.seed, lit: 0.22, entrances: [], balconies: 0.3, aviation: f.floors >= 14 });
@@ -863,7 +874,7 @@ export function buildYardView(lite: boolean, G: number, kit = createKit(lite)): 
   // a car now and then, and a neighbour walking home under an umbrella
   const traffic = new PassingCar(g, kit, lite, "#c8c2b0", { axis: "x", lane: -6.9, laneOffset: 1.05, y: G + 0.02, from: -75, to: 80, cruise: 9, gap: [7, 18] });
   const walker = buildPedestrian(lite); g.add(walker.group);
-  const route = [new THREE.Vector3(-38, G, -13.6), new THREE.Vector3(-10, G, -13.6), new THREE.Vector3(-10, G, -29), new THREE.Vector3(-10, G, -13.6), new THREE.Vector3(48, G, -13.6)];
+  const route = [new THREE.Vector3(-38, G, -13.6), new THREE.Vector3(-10, G, -13.6), new THREE.Vector3(-10, G, -45.5), new THREE.Vector3(30, G, -45.5), new THREE.Vector3(48, G, -45.5)];
   let leg = 0, legT = 0;
   return {
     group: g,
@@ -895,7 +906,7 @@ export function buildStreetLife(st: THREE.Group, lite: boolean, onHonk: () => vo
   const beacons: THREE.Mesh[] = [];
   // courtyard behind the far fence
   kit.dirt.repeat.set(30, 30);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(140, 180), mat(lite, { map: kit.dirt, roughness: 1 }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(140, 180), nightMat(lite, { map: kit.dirt, roughness: 1 }, 0.25, "#d8c0a0"));
   ground.rotation.x = -Math.PI / 2; ground.position.set(101.5, -0.02, 5); st.add(ground);
   const blocks = [
     { x: 58, z: 6, len: 96, floors: 9, seed: 51, ry: -Math.PI / 2, ent: [-30, -6, 18, 42] },
@@ -925,7 +936,7 @@ export function buildStreetLife(st: THREE.Group, lite: boolean, onHonk: () => vo
   const wires = buildWires(kit, [-34, -14, 6, 26, 46].map((z) => new THREE.Vector3(30.1, 0, z)), 8.5);
   st.add(wires.group);
   // drifting autumn leaves around the player
-  const leaves = createFallingLeaves(lite ? 140 : 360, 26, 9);
+  const leaves = createFallingLeaves(lite ? 90 : 220, 26, 9);
   st.add(leaves.mesh);
   // traffic in both lanes; it brakes and honks for a pedestrian
   const traffic = new PassingCar(st, kit, lite, "#b8b2a2", { axis: "z", lane: 23.95, laneOffset: -0.55, y: -0.15, from: -40, to: 40, cruise: 10, gap: [9, 20] }, onHonk);
@@ -940,7 +951,7 @@ export function buildStreetLife(st: THREE.Group, lite: boolean, onHonk: () => vo
       pg.carousel.rotation.y += dt * 0.12 * c.wind;
       wires.update(c.t, c.wind);
       if (c.player) leaves.uniforms.uCenter.value.set(c.player.x, -0.2, c.player.z);
-      leaves.uniforms.uLight.value = 0.3 + c.flash * 0.8;
+      leaves.uniforms.uLight.value = 0.16 + c.flash * 0.6;
       traffic.update(dt, c.allowTraffic !== false, c.player);
     },
   };

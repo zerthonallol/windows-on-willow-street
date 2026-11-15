@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { departureNext, canBeginMainGame, nextFloor, stairLap, LIFT_WORKS, START_FLOOR, STAIR_HEIGHT, type DepartureStage } from "./departure-rules";
+import { departureNext, canBeginMainGame, nextFloor, stairLap, hallFeature, LIFT_WORKS, START_FLOOR, STAIR_HEIGHT, type DepartureStage } from "./departure-rules";
 
 describe("departure before the main game", () => {
   it("leaving the apartment leads to the landing, not the main game", () => {
@@ -35,5 +35,10 @@ describe("departure before the main game", () => {
     expect(departureNext("car", "startEngine")).toBe("starting");
     expect(departureNext("starting", "engineReady")).toBe("done");
     expect(canBeginMainGame("done")).toBe(true);
+  });
+  it("shows the street exit instead of the lift on the first floor only", () => {
+    expect(hallFeature(1)).toBe("exit");
+    expect(hallFeature(START_FLOOR)).toBe("lift");
+    for (let f = 2; f <= 9; f++) expect(hallFeature(f)).toBe("lift");
   });
 });

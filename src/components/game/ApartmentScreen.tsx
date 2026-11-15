@@ -42,6 +42,13 @@ export function ApartmentScreen({ lang, onDone }: { lang: Lang; onDone: () => vo
           <div className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground/70" />
           {hud.prompt && <div className={`absolute left-0 w-full text-center text-lg ${isTouch ? "bottom-40" : "bottom-28"}`}><span className="panel-glass rounded px-3 py-1">{isTouch ? "" : "[E] "}{hud.prompt}</span></div>}
           {hud.subtitle && <div className="absolute bottom-10 left-0 w-full px-6 text-center"><span className="cutscene-caption inline-block max-w-3xl rounded px-4 py-2 text-base md:text-lg">{hud.subtitle}</span></div>}
+          {hud.note && (
+            <div className="notice-paper absolute left-1/2 top-1/2 w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 rounded-sm px-7 py-6">
+              <h3 className="mb-3 text-center text-xl font-bold tracking-wide">{hud.note.title}</h3>
+              <p className="whitespace-pre-line text-base leading-relaxed">{hud.note.body}</p>
+              <p className="notice-paper-hint mt-5 text-center text-xs">{isTouch ? L("Нажмите кнопку действия, чтобы убрать", "Tap the action button to put it away") : L("[E] — убрать", "[E] — put away")}</p>
+            </div>
+          )}
           {hud.paused && !isTouch && <div className="absolute inset-0 grid place-items-center bg-background/60 font-display text-2xl">{L("Кликните, чтобы продолжить", "Click to continue")}</div>}
           <div className="absolute inset-0 bg-background" style={{ opacity: hud.fade }} />
         </div>

@@ -32,3 +32,6 @@ export function departureNext(stage: DepartureStage, action: DepartureAction): D
 export function canBeginMainGame(stage: DepartureStage) { return stage === "done"; }
 /** Floor after walking one full storey down (-1) or up (+1); never above the start floor or below 1. */
 export function nextFloor(floor: number, dir: -1 | 1) { return Math.max(1, Math.min(START_FLOOR, floor + dir)); }
+
+/** On the ground floor the street door stands where the lift portal is on every other floor. */
+export function hallFeature(floor: number): "exit" | "lift" { return floor === 1 ? "exit" : "lift"; }
