@@ -1,0 +1,13 @@
+# Remaining game work
+- [ ] Fix held-key walking and seamless floor-by-floor stair descent; enrich the hall and elevator; animate driving away before the pictured intro; verify the full departure flow.
+- [ ] Image touch controls and inventory
+- [ ] Landscape lock with browser fallback
+- [ ] Bear skins and visible model verification
+- [ ] Russian/English menus and notes, Telegram link
+- [ ] Intro cutscene and voiced ghost conversation
+- [ ] Two additional endings and rule tests
+- [ ] Complete voice assets and desktop/mobile verification- [x] Bigger circus map: freak-show hall, backstage with bodies, yard, trash, exhibits, props
+- [x] Practice mode (animatronic can't catch, no battery drain)
+- [x] Mobile: animatronic invisible fix (lite materials + light budget)
+- [x] Items spawn inside broken cabinets with opening animation
+- [x] Trash and walk-through props removed, practice bear never notices, Ringmaster room + radio ending, voiced tape
