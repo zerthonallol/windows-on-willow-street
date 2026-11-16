@@ -28,12 +28,13 @@ describe("departure before the main game", () => {
     expect(departureNext("ground", "leaveBuilding")).toBe("street");
     expect(departureNext("street", "enterCar")).toBe("car");
   });
-  it("only starts the main game after the engine starts", () => {
-    for (const stage of ["apartment", "landing", "stairs", "ground", "street", "car", "starting"] as DepartureStage[]) {
+  it("only starts the main game after walking into the park", () => {
+    for (const stage of ["apartment", "landing", "stairs", "ground", "street", "car", "starting", "road", "stalled", "walk"] as DepartureStage[]) {
       expect(canBeginMainGame(stage)).toBe(false);
     }
     expect(departureNext("car", "startEngine")).toBe("starting");
-    expect(departureNext("starting", "engineReady")).toBe("done");
+    expect(departureNext("starting", "engineReady")).toBe("road");
+    expect(departureNext("walk", "enterPark")).toBe("done");
     expect(canBeginMainGame("done")).toBe(true);
   });
   it("shows the street exit instead of the lift on the first floor only", () => {

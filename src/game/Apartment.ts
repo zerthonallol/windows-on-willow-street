@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { Sfx } from "./audio";
 import { createRain, Lightning } from "./atmosphere";
-import { APARTMENT, voiceUrl, type Lang } from "./story";
+import { APARTMENT, CUTSCENE, voiceUrl, type Lang } from "./story";
 import parquetUrl from "@/assets/apartment/parquet.jpg";
 import wallpaperUrl from "@/assets/apartment/wallpaper.jpg";
 import tileUrl from "@/assets/apartment/tile.jpg";
@@ -14,12 +14,14 @@ import { movementDistance, normalizeMovement, PROLOGUE_STEP } from "./locomotion
 import { buildCar, setCarLights, type CarModel } from "./carModel";
 import { buildYardView, buildStreetLife, buildBlock, buildCat, createKit, createStormSky, updateWind, HAZE, type Kit, type LivingWorld } from "./exterior";
 import { NOTICES, paintNotice, type NoticeId } from "./notices";
+import { buildRoad, fitCar, ROAD_ORIGIN, STOP_LATERAL, type RoadWorld } from "./roadTrip";
+import { BATTERY_DIES_ON, CRUISE, DIE_AT, GATE, HEAD_OFF_Z, SPUTTER_AT, STOP_AT, canHeadOff, canLeaveCar, roadTask, trailDistance, walkable } from "./road-rules";
 
 export interface AptHud { prompt: string; objective: string; subtitle: string; paused: boolean; flashlight: boolean; fade: number; note: { title: string; body: string } | null }
 export interface AptCallbacks { onHud: (h: AptHud) => void; onProgress: (p: number) => void; onReady: () => void; onDone: () => void }
 
 type Box = [number, number, number, number]; // minX, minZ, maxX, maxZ
-type Zone = "apt" | "hall" | "stairs" | "street";
+type Zone = "apt" | "hall" | "stairs" | "street" | "road";
 interface Spot { id: string; pos: THREE.Vector3; label: () => string; ok: () => boolean; use: () => void; zone?: Zone }
 
 const H = STAIR_HEIGHT, T = 0.12, EYE = 1.65, R = 0.28;
@@ -204,6 +206,38 @@ export class Apartment {
   private catPets = 0;
   private windowLooks = 0;
   private rings: Record<string, number> = {};
+  private outerDoor!: THREE.Object3D;
+  private outerOpen = 0;
+  // the drive to the park and the breakdown
+  private road!: RoadWorld;
+  private carFit: ReturnType<typeof fitCar> | null = null;
+  private carSpots: { spot: Spot; local: THREE.Vector3 }[] = [];
+  private roadDriven = 0;
+  private roadSpeed = 0;
+  private roadLateral = 1.8;
+  private carYaw = 0;
+  private roadFade = 0;
+  private engineDead = false;
+  private decel = 0;
+  private cranks = 0;
+  private batteryDead = false;
+  private hazard = false;
+  private wipers = true;
+  private radioStep = 0;
+  private hoodUp = false;
+  private hoodAngle = 0;
+  private trunkUp = false;
+  private trunkAngle = 0;
+  private holdingTriangle = false;
+  private trianglePlaced = false;
+  private trunkTriangle!: THREE.Object3D;
+  private phoneT = 2;
+  private phoneAnswered = false;
+  private gateOpening = false;
+  private gateAngle = 0;
+  private parkEntered = false;
+  private owlT = 12;
+  private nagT = 0;
 
   constructor(private container: HTMLElement, private cb: AptCallbacks, private lang: Lang) {
     this.isTouch = window.matchMedia("(pointer: coarse)").matches;
@@ -218,7 +252,7 @@ export class Apartment {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     container.appendChild(this.renderer.domElement);
-    this.camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.03, 80);
+    this.camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.03, 220);
     this.camera.rotation.order = "YXZ";
     this.scene.add(this.camera);
     this.scene.fog = new THREE.Fog(HAZE, 30, 170);
@@ -951,6 +985,7 @@ export class Apartment {
     this.buildExit(metal);
     this.buildStairs(plaster, green, stepMat, rail, door, lamp, wall);
     this.buildStreet(metal, dark);
+    this.buildRoadTrip();
   }
 
   /**

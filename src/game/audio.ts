@@ -177,6 +177,24 @@ export class Sfx {
   knock() { for (let i = 0; i < 3; i++) { const id = window.setTimeout(() => this.noise(0.09, 260, 1.2, 0.5, "lowpass"), i * 220); this.timers.push(id); } }
   hum(vol: number) { this.tone(100, 0.25, vol, "sawtooth", 100); this.noise(0.08, 3800, 4, vol * 0.6); }
   private windGain: GainNode | null = null;
+  /** Starter motor cranking without the engine catching. */
+  crank(weak = false) {
+    for (let i = 0; i < (weak ? 3 : 7); i++) {
+      const id = window.setTimeout(() => { this.noise(0.16, weak ? 140 : 220, 3, weak ? 0.12 : 0.3, "bandpass"); this.tone(weak ? 38 : 52, 0.16, weak ? 0.05 : 0.12, "sawtooth"); }, i * (weak ? 260 : 170));
+      this.timers.push(id);
+    }
+  }
+  /** The engine coughing as it dies. */
+  sputter() { this.noise(0.25, 160, 2, 0.4, "lowpass"); this.tone(40, 0.3, 0.15, "sawtooth", 24); }
+  /** Old rotary payphone bell. */
+  ring() {
+    for (let i = 0; i < 14; i++) this.tone(i % 2 ? 1180 : 940, 0.06, 0.07, "square", undefined, this.master, i * 0.07);
+  }
+  wiper() { this.noise(0.35, 1800, 0.6, 0.035, "bandpass", 900); }
+  owl() { this.tone(420, 0.35, 0.06, "sine", 380, this.master, 0); this.tone(400, 0.6, 0.06, "sine", 340, this.master, 0.5); }
+  gate() { this.tone(180, 1.4, 0.09, "sawtooth", 120); this.noise(1.2, 700, 4, 0.12, "bandpass", 300); }
+  slam() { this.noise(0.6, 200, 1, 0.8, "lowpass", 60); this.tone(90, 0.5, 0.3, "square", 50); }
+  static() { this.noise(1.6, 2600, 0.4, 0.08, "bandpass"); }
   startWind() {
     if (this.windGain) return;
     const src = this.ctx.createBufferSource(); src.buffer = this.noiseBuf; src.loop = true;

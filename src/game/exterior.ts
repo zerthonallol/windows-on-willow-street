@@ -29,7 +29,7 @@ export function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext
   return t;
 }
 
-function mat(lite: boolean, p: Record<string, unknown>) {
+export function mat(lite: boolean, p: Record<string, unknown>) {
   if (lite) {
     const { roughness, metalness, ...rest } = p;
     return new THREE.MeshLambertMaterial(rest);
@@ -38,7 +38,7 @@ function mat(lite: boolean, p: Record<string, unknown>) {
 }
 
 /** Dimly self-lit exterior surface: at night the city glow keeps facades and ground faintly readable. */
-function nightMat(lite: boolean, p: Record<string, unknown>, glow: number, tint = "#ffffff") {
+export function nightMat(lite: boolean, p: Record<string, unknown>, glow: number, tint = "#ffffff") {
   const m = mat(lite, p) as THREE.MeshStandardMaterial;
   m.emissive = new THREE.Color(tint).multiplyScalar(glow);
   if (p["map"]) m.emissiveMap = p["map"] as THREE.Texture;

@@ -54,6 +54,38 @@ export const NOTICES = {
       en: "Do not drop rubbish beside it!\nDo not open the hatch after midnight —\nresidents complain about noises from below.",
     },
   },
+  timetable: {
+    style: "typed",
+    title: { ru: "ОСТАНОВКА «ПАРК»", en: "STOP: \"THE PARK\"" },
+    body: {
+      ru: "Автобус №13 «Вокзал — Весёлые Горки»\nПо выходным: 9:00, 11:30, 14:00, 17:30\n\nС 15.11.1987 маршрут отменён.\n\nКто-то ручкой дописал снизу: «последний рейс так и не вернулся»",
+      en: "Bus No. 13 \"Station — Happy Hills\"\nWeekends: 9:00, 11:30, 14:00, 17:30\n\nRoute cancelled from 15.11.1987.\n\nSomeone has added in pen: \"the last run never came back\"",
+    },
+  },
+  watchman: {
+    style: "hand",
+    title: { ru: "ТРЕБУЕТСЯ СТОРОЖ", en: "NIGHT WATCHMAN WANTED" },
+    body: {
+      ru: "В парк «Весёлые Горки» требуется ночной сторож.\nЖильё, фонарь и тёплая куртка выдаются.\nОпыт не обязателен. Смена — до рассвета.\nСпросить Митча у главных ворот.",
+      en: "Happy Hills park needs a night watchman.\nLodging, lantern and a warm jacket provided.\nNo experience needed. Shift lasts until dawn.\nAsk for Mitch at the main gate.",
+    },
+  },
+  ticket: {
+    style: "old",
+    title: { ru: "БИЛЕТ · 30 коп.", en: "TICKET · 30 kopecks" },
+    body: {
+      ru: "Парк культуры и отдыха «Весёлые Горки»\nДетский. Все аттракционы.\n14 ноября 1987 г.\nКорешок не оторван — билетом так никто и не воспользовался.",
+      en: "Happy Hills Park of Culture and Leisure\nChild. All rides.\nNovember 14, 1987.\nThe stub was never torn off — nobody ever used this ticket.",
+    },
+  },
+  poster: {
+    style: "old",
+    title: { ru: "ЦИРК! ТОЛЬКО ОДИН ВЕЧЕР!", en: "CIRCUS! ONE NIGHT ONLY!" },
+    body: {
+      ru: "Медведь Барни и его друзья!\nКлоуны, акробаты, поющие аниматроники.\nКаждый ребёнок получит воздушный шарик.\nНачало в 20:00. Вход через главные ворота.",
+      en: "Barney the Bear and friends!\nClowns, acrobats, singing animatronics.\nEvery child gets a balloon.\nShow starts at 8 PM. Enter by the main gate.",
+    },
+  },
 } satisfies Record<string, Notice>;
 
 export type NoticeId = keyof typeof NOTICES;
