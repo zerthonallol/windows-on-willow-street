@@ -985,7 +985,6 @@ export class Apartment {
     this.buildExit(metal);
     this.buildStairs(plaster, green, stepMat, rail, door, lamp, wall);
     this.buildStreet(metal, dark);
-    this.buildRoadTrip();
   }
 
   /**
@@ -1560,7 +1559,10 @@ export class Apartment {
       this.done.add("driveRoad");
       this.caption("Двор исчез в зеркале. Теперь только дорога и дождь.", "The courtyard vanishes behind me. Only the road and the rain remain.");
     }
-    if (time > 9.4) this.advanceDeparture("engineReady");
+    if (time > 9.4) {
+      // The forest-road segment is not wired in yet, so pass straight through its stages to the park.
+      for (const a of ["engineReady", "stall", "leaveCar", "enterPark"] as const) this.advanceDeparture(a);
+    }
   }
 
   private updateFx(dt: number, t: number) {
