@@ -1,5 +1,5 @@
 # Remaining game work
-- [ ] Fix held-key walking and seamless floor-by-floor stair descent; enrich the hall and elevator; animate driving away before the pictured intro; verify the full departure flow.
+- [ ] Finish and verify departure: walk through ground-floor doors, grounded street drive, no intro pictures, roadside breakdown and walk to the circus.
 - [ ] Image touch controls and inventory
 - [ ] Landscape lock with browser fallback
 - [ ] Bear skins and visible model verification

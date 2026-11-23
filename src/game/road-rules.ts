@@ -44,7 +44,10 @@ function segDist(px: number, pz: number, a: [number, number], b: [number, number
 }
 export function trailDistance(x: number, z: number) {
   let d = Infinity;
-  for (let i = 0; i + 1 < TRAIL.length; i++) d = Math.min(d, segDist(x, z, TRAIL[i]!, TRAIL[i + 1]!));
+  for (let i = 0; i + 1 < TRAIL.length; i++) {
+    const a = TRAIL[i], b = TRAIL[i + 1];
+    if (a && b) d = Math.min(d, segDist(x, z, a, b));
+  }
   return d;
 }
 /** Can the player stand here? Road strip, the trail, or the small clearing in front of the gate. */

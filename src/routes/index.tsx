@@ -6,7 +6,6 @@ import type { MenuScene } from "@/game/MenuScene";
 import { GFX, GFX_KEY, defaultGraphics, type Graphics } from "@/game/settings";
 import { Button } from "@/components/ui/button";
 import { Send, X, Backpack, Smartphone } from "lucide-react";
-import { Intro } from "@/components/game/Intro";
 import { ApartmentScreen } from "@/components/game/ApartmentScreen";
 import { GhostDialog } from "@/components/game/GhostDialog";
 import { CONTROL_IMAGES, ITEM_IMAGES } from "@/components/game/media";
@@ -84,7 +83,7 @@ function Page() {
   const menuBox = useRef<HTMLDivElement>(null);
   const game = useRef<Game | null>(null);
   const menu = useRef<MenuScene | null>(null);
-  const [screen, setScreen] = useState<"menu" | "apartment" | "intro" | "difficulty" | "play" | "end">("menu");
+  const [screen, setScreen] = useState<"menu" | "apartment" | "difficulty" | "play" | "end">("menu");
   const [panel, setPanel] = useState<"main" | "controls" | "endings" | "graphics" | "skins">("main");
   const [gfx, setGfx] = useState<Graphics>("medium");
   const [isTouch, setIsTouch] = useState(false);
@@ -108,7 +107,7 @@ function Page() {
   }, []);
 
   useEffect(() => {
-    if (screen === "play" || screen === "apartment" || screen === "intro" || screen === "difficulty" || !menuBox.current) return;
+    if (screen === "play" || screen === "apartment" || screen === "difficulty" || !menuBox.current) return;
     let alive = true;
     import("@/game/MenuScene").then(({ MenuScene }) => {
       if (alive && menuBox.current) { menu.current = new MenuScene(menuBox.current); menu.current.setSkin(skin); }
@@ -192,8 +191,7 @@ function Page() {
         <TouchControls game={game} prompt={hud.prompt} flashlight={hud.flashlight} onInventory={openInventory} />
       )}
 
-      {screen === "apartment" && <ApartmentScreen lang={lang} onDone={() => setScreen("intro")} />}
-      {screen === "intro" && <Intro lang={lang} onFinish={() => setScreen("difficulty")} />}
+      {screen === "apartment" && <ApartmentScreen lang={lang} onDone={() => setScreen("difficulty")} />}
       {screen === "difficulty" && (
         <div className="absolute inset-0 z-40 grid place-items-center bg-background p-6">
           <div className="fade-up w-full max-w-lg text-center">

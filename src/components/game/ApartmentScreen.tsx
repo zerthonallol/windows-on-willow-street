@@ -3,9 +3,9 @@ import type { Apartment, AptHud } from "@/game/Apartment";
 import type { Game } from "@/game/Game";
 import type { Lang } from "@/game/story";
 import { TouchControls } from "./TouchControls";
-import loadingImg from "@/assets/apartment/loading.jpg";
+import { Button } from "@/components/ui/button";
 
-// Prologue: loading picture -> 7th-floor apartment -> onDone sends the player to the main game.
+// Live apartment -> stairs -> drive and breakdown -> park gate.
 export function ApartmentScreen({ lang, onDone }: { lang: Lang; onDone: () => void }) {
   const box = useRef<HTMLDivElement>(null);
   const apt = useRef<Apartment | null>(null);
@@ -58,11 +58,10 @@ export function ApartmentScreen({ lang, onDone }: { lang: Lang; onDone: () => vo
       )}
       {!entered && (
         <div className="absolute inset-0 z-10">
-          <img src={loadingImg} alt="" className="h-full w-full animate-pulse object-cover [animation-duration:4s]" />
           <div className="cutscene-caption absolute inset-x-0 bottom-0 px-6 pb-10 pt-24 text-center">
             <p className="mx-auto max-w-2xl text-muted-foreground">{L("23:41. Седьмой этаж. Ливень не прекращается третьи сутки…", "11:41 PM. Seventh floor. The downpour hasn't stopped in three days…")}</p>
             {ready ? (
-              <button onClick={enter} className="mt-6 font-display text-2xl tracking-widest text-foreground hover:text-accent">{L("Нажмите, чтобы начать", "Click to begin")}</button>
+              <Button variant="ghost" onClick={enter} className="mt-6 h-auto whitespace-normal font-display text-2xl tracking-widest">{L("Нажмите, чтобы начать", "Click to begin")}</Button>
             ) : (
               <div className="mx-auto mt-6 h-1 w-64 overflow-hidden rounded bg-muted">
                 <div className="h-full bg-accent transition-all" style={{ width: `${Math.round(progress * 100)}%` }} />

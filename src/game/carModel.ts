@@ -78,6 +78,15 @@ export function buildCar(lite: boolean, color = "#3f6a62"): CarModel {
   const cab = new THREE.ExtrudeGeometry(profile([[-0.95, 0.9], [1.2, 0.9], [0.8, 1.38], [-0.45, 1.38]]), { depth: cabW, bevelEnabled: false });
   cab.rotateY(-Math.PI / 2); cab.translate(-cabW / 2, 0, 0);
   add(cab, glass, cabW, 0, 0).renderOrder = 2;
+  add(new THREE.BoxGeometry(cabW, 0.045, 1.25), paint, 0, 1.4, 0.175);
+  for (const x of [-cabW / 2, cabW / 2]) {
+    const front = add(new THREE.BoxGeometry(0.055, 0.7, 0.055), paint, x, 1.14, -0.7); front.rotation.x = 0.806;
+    const rear = add(new THREE.BoxGeometry(0.055, 0.63, 0.055), paint, x, 1.14, 1); rear.rotation.x = -0.695;
+    add(new THREE.BoxGeometry(0.045, 0.49, 0.045), paint, x, 1.145, 0.27);
+  }
+  // Engine sits below the bonnet, never in the passenger compartment.
+  add(new THREE.BoxGeometry(0.7, 0.25, 0.65), dash, 0, 0.65, -1.6);
+  add(new THREE.BoxGeometry(0.24, 0.18, 0.28), rubber, 0.55, 0.69, -1.18);
   // Bumpers, grille, lamps
   add(new THREE.BoxGeometry(W + 0.06, 0.14, 0.12), chrome, 0, 0.42, -2.36);
   add(new THREE.BoxGeometry(W + 0.06, 0.14, 0.12), chrome, 0, 0.42, 2.36);

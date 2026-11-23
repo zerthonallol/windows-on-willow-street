@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { Sfx } from "./audio";
 import { createRain, Lightning } from "./atmosphere";
-import { APARTMENT, CUTSCENE, voiceUrl, type Lang } from "./story";
+import { APARTMENT, voiceUrl, type Lang } from "./story";
 import parquetUrl from "@/assets/apartment/parquet.jpg";
 import wallpaperUrl from "@/assets/apartment/wallpaper.jpg";
 import tileUrl from "@/assets/apartment/tile.jpg";
@@ -15,6 +15,7 @@ import { buildCar, setCarLights, type CarModel } from "./carModel";
 import { buildYardView, buildStreetLife, buildBlock, buildCat, createKit, createStormSky, updateWind, HAZE, type Kit, type LivingWorld } from "./exterior";
 import { NOTICES, paintNotice, type NoticeId } from "./notices";
 import { buildRoad, fitCar, ROAD_ORIGIN, STOP_LATERAL, type RoadWorld } from "./roadTrip";
+import { STREET_OFFSET, STREET_LENGTH, inStreet, streetGround, streetToWorld, worldToStreet } from "./street-rules";
 import { BATTERY_DIES_ON, CRUISE, DIE_AT, GATE, HEAD_OFF_Z, SPUTTER_AT, STOP_AT, canHeadOff, canLeaveCar, roadTask, trailDistance, walkable } from "./road-rules";
 
 export interface AptHud { prompt: string; objective: string; subtitle: string; paused: boolean; flashlight: boolean; fade: number; note: { title: string; body: string } | null }
@@ -206,6 +207,9 @@ export class Apartment {
   private catPets = 0;
   private windowLooks = 0;
   private rings: Record<string, number> = {};
+  private streetBoxes: Box[] = [];
+  private restartT = 0;
+  private outerOpening = false;
   private outerDoor!: THREE.Object3D;
   private outerOpen = 0;
   // the drive to the park and the breakdown
@@ -706,7 +710,8 @@ export class Apartment {
     this.box(1.72, 0.05, 1.6, this.mat({ map: linoTex(), color: "#6d6a62" }), 12.8, -0.05, 2.15, false, E);
     this.box(1.72, 0.05, 1.6, tamb, 12.8, 2.28, 2.15, false, E);
     for (const x of [11.92, 13.68]) { this.box(0.06, 2.3, 1.6, tamb, x, 0, 2.15, false, E); this.box(0.065, 1.1, 1.6, tambGreen, x, 0, 2.15, false, E); }
-    this.box(1.72, 2.3, 0.06, tamb, 12.8, 0, 1.33, false, E);
+    for (const x of [12.11, 13.49]) this.box(0.36, 2.3, 0.06, tamb, x, 0, 1.33, false, E);
+    this.box(1.0, 0.2, 0.06, tamb, 12.8, 2.1, 1.33, false, E);
     const glowTex = canvasTex(128, 160, (g) => {
       const bg = g.createLinearGradient(0, 0, 0, 160); bg.addColorStop(0, "#0b1118"); bg.addColorStop(1, "#1a1a1c");
       g.fillStyle = bg; g.fillRect(0, 0, 128, 160);
@@ -716,9 +721,13 @@ export class Apartment {
     }, false);
     this.exitGlass = new THREE.MeshBasicMaterial({ map: glowTex, color: "#c8ccd2" });
     // outer street door at the end of the vestibule, its glass glowing from the streetlight
-    this.box(1.0, 2.1, 0.06, leafM, 12.8, 0, 1.37, false, E);
-    const outerPane = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.85), this.exitGlass); outerPane.position.set(12.8, 1.45, 1.405); E.add(outerPane);
-    this.box(0.25, 0.04, 0.05, metal, 13.1, 1.0, 1.42, false, E);
+    const outer = this.outerDoor = new THREE.Group(); outer.position.set(12.3, 0, 1.37); E.add(outer);
+    for (const x of [0.045, 0.955]) this.box(0.09, 2.1, 0.06, leafM, x, 0, 0, false, outer);
+    this.box(0.82, 1.02, 0.06, leafM, 0.5, 0, 0, false, outer);
+    this.box(0.82, 0.12, 0.06, leafM, 0.5, 1.98, 0, false, outer);
+    const clearGlass = this.mat({ color: "#94acae", transparent: true, opacity: 0.14, side: THREE.DoubleSide });
+    this.box(0.82, 0.96, 0.014, clearGlass, 0.5, 1.02, 0, false, outer);
+    this.box(0.25, 0.04, 0.05, metal, 0.8, 1.0, 0.05, false, outer);
     const lampMat = new THREE.MeshBasicMaterial({ color: "#d8e4c0" });
     this.box(0.25, 0.05, 0.25, lampMat, 12.8, 2.22, 2.1, false, E);
     // inner double doors in the hall wall, hinged at the outer edges, opening into the vestibule
@@ -727,9 +736,11 @@ export class Apartment {
     for (const side of [-1, 1]) {
       const pivot = new THREE.Group(); pivot.position.set(12.8 + side * 0.8, 0.02, 3.06); E.add(pivot);
       const cx = -side * 0.395;
-      this.box(0.78, 2.04, 0.05, leafM, cx, 0, 0, false, pivot);
+      this.box(0.78, 1.15, 0.05, leafM, cx, 0, 0, false, pivot);
+      this.box(0.78, 0.22, 0.05, leafM, cx, 1.82, 0, false, pivot);
+      for (const dx of [-0.34, 0.34]) this.box(0.1, 0.67, 0.05, leafM, cx + dx, 1.15, 0, false, pivot);
       for (const face of [-1, 1]) {
-        const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.66), this.exitGlass);
+        const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.66), clearGlass);
         pane.position.set(cx, 1.5, face * 0.027); if (face < 0) pane.rotation.y = Math.PI; pivot.add(pane);
       }
       this.box(0.035, 0.35, 0.04, metal, cx - side * 0.3, 0.85, 0.05, false, pivot);
@@ -741,7 +752,7 @@ export class Apartment {
     this.box(0.18, 0.32, 0.04, this.mat({ color: "#8a8f8c", metalness: 0.6, roughness: 0.4 }), 13.95, 1.1, 3.09, false, E);
     for (let i = 0; i < 9; i++) this.box(0.03, 0.03, 0.012, this.mat({ color: "#2a2c2c" }), 13.91 + (i % 3) * 0.04, 1.16 + Math.floor(i / 3) * 0.05, 3.115, false, E);
     this.box(0.12, 0.04, 0.012, new THREE.MeshBasicMaterial({ color: "#3a8a3a" }), 13.95, 1.36, 3.115, false, E);
-    this.spot("buildingExit", new THREE.Vector3(12.8, 1.2, 3.15), () => this.l("Открыть дверь на улицу", "Open the street door"), () => this.departure === "ground" && !this.transition, () => this.leaveBuilding(), "hall");
+    this.spot("buildingExit", new THREE.Vector3(12.8, 1.2, 3.15), () => this.l("Открыть дверь на улицу", "Open the street door"), () => this.departure === "ground" && !this.exitOpening, () => this.leaveBuilding(), "hall");
     this.spot("intercom", new THREE.Vector3(13.95, 1.3, 3.13), () => this.l("Нажать кнопку домофона", "Press the intercom button"), () => this.departure === "ground", () => {
       this.sfx.beep();
       this.caption("Домофон пискнул. Изнутри дверь открывается и так.", "The intercom beeps. From inside the door opens anyway.");
@@ -749,15 +760,7 @@ export class Apartment {
   }
   private leaveBuilding() {
     this.sfx.door(); this.exitOpening = true;
-    this.transition = {
-      t: 0, fired: false, mid: () => {
-        this.advanceDeparture("leaveBuilding"); this.pos.set(17.2, 0, 5.85); this.yaw = -Math.PI / 2; this.pitch = 0;
-        this.street.visible = true; this.yard.group.visible = false; this.rain.mesh.visible = false;
-        const fog = this.scene.fog as THREE.Fog; fog.near = 14; fog.far = 130; fog.color.set(HAZE);
-        this.sfx.door();
-        this.caption("Моя машина у фонаря. Ключи со мной.", "My car is under the streetlight. I've got the keys.");
-      },
-    };
+    this.caption("Пройти через тамбур и открыть наружную дверь.", "Walk through the vestibule and open the outer door.");
   }
 
   private buildHallDetails(metal: THREE.Material, dark: THREE.Material) {
@@ -985,6 +988,7 @@ export class Apartment {
     this.buildExit(metal);
     this.buildStairs(plaster, green, stepMat, rail, door, lamp, wall);
     this.buildStreet(metal, dark);
+    this.spot("outerDoor", new THREE.Vector3(13.0, 1.1, 1.43), () => this.l("Открыть наружную дверь", "Open the outer door"), () => this.departure === "ground" && this.exitOpening && !this.outerOpening, () => { this.outerOpening = true; this.sfx.door(); }, "hall");
   }
 
   /**
@@ -1159,6 +1163,8 @@ export class Apartment {
   }
   /** Local ground height: hall/landing 0, flights descend one storey (H) per lap. */
   private groundY(x: number, z: number) {
+    if (["road", "stalled", "walk"].includes(this.departure)) return 0;
+    if (this.departure === "street") return streetGround(worldToStreet(x, z).x);
     if (x >= 16) return x > 19.5 && x < 28.5 ? -0.15 : 0;
     if (z < 8.07 || x <= 11.2) return 0;
     if (x >= 14.8) return -1.35;
@@ -1169,6 +1175,7 @@ export class Apartment {
   private buildStreet(metal: THREE.Material, dark: THREE.Material) {
     const st = this.street = new THREE.Group(); this.scene.add(st); st.visible = false;
     const lite = this.isTouch;
+    const boxStart = this.boxes.length, spotStart = this.spots.length;
     // panel-block facade with random lit windows (also hides the interior behind it)
     const lit: [number, number][] = [];
     const facadeTex = canvasTex(1024, 1024, (g) => {
@@ -1193,16 +1200,15 @@ export class Apartment {
       for (const [x, y] of lit) { g.fillStyle = Math.random() < 0.5 ? "#ffb35c" : "#d9e4ff"; g.globalAlpha = 0.55 + Math.random() * 0.4; g.fillRect(x, y, 80, 60); g.fillStyle = "#331a08"; g.globalAlpha = 0.5; g.fillRect(x + 38, y, 4, 60); g.fillRect(x, y + 20, 80, 3); }
       g.globalAlpha = 1;
     }, false);
-    const facade = new THREE.Mesh(new THREE.BoxGeometry(0.22, 24.3, 19), new THREE.MeshLambertMaterial({ map: facadeTex, emissive: "#ffffff", emissiveMap: litTex, emissiveIntensity: 0.9 }));
-    facade.position.set(16.19, 12.15, 5.5 + 0.35); st.add(facade);
+    const facade = new THREE.Mesh(new THREE.BoxGeometry(0.22, 22.05, 19), new THREE.MeshLambertMaterial({ map: facadeTex, emissive: "#ffffff", emissiveMap: litTex, emissiveIntensity: 0.9 }));
+    facade.position.set(16.19, 13.275, 5.85); st.add(facade);
+    for (const z of [0.75, 10.95]) this.box(0.22, 2.25, 8.8, this.mat({ map: facadeTex }), 16.19, 0, z, false, st);
     // the rest of our long block continues up and down the street
     for (const [z, ent, seed] of [[-14.65, 4, 71], [26.35, -4, 72]] as const) {
       const b = buildBlock(this.kit, { len: 22, depth: 12, floors: 9, seed, lit: 0.3, entrances: [ent] });
       b.group.position.set(10.3, 0.6, z); b.group.rotation.y = Math.PI / 2; st.add(b.group);
     }
     // entrance: door, canopy, warm lamp, steps
-    this.box(0.05, 2.25, 1.3, this.mat({ map: woodTex("#3a2a20", "#1a110b") }), 16.33, 0, 5.85, false, st);
-    this.box(0.04, 0.9, 0.8, this.mat({ color: "#2c3c44", transparent: true, opacity: 0.6 }), 16.37, 1.1, 5.85, false, st);
     this.box(1.6, 0.12, 2.6, this.mat({ color: "#4c4a45" }), 17.1, 2.6, 5.85, false, st);
     this.box(1.6, 0.12, 2.0, this.mat({ map: plasterTex(), color: "#77746d" }), 17.1, -0.02, 5.85, false, st);
     this.box(0.25, 0.12, 0.05, new THREE.MeshBasicMaterial({ color: "#ffd59a" }), 16.42, 2.42, 5.85, false, st);
@@ -1210,22 +1216,22 @@ export class Apartment {
     this.sign("12", 16.32, 3.0, 4.6, 0.36, 0.24, Math.PI / 2, st);
     // sidewalk, curbs, wet asphalt with markings, far sidewalk
     const pave = this.mat({ map: (() => { const t = linoTex(); t.repeat.set(4, 22); return t; })(), color: "#5e605d", roughness: 0.6 });
-    this.box(3.2, 0.2, 26, pave, 17.9, -0.2, 4.5, false, st);
+    this.box(3.2, 0.2, STREET_LENGTH, pave, 17.9, -0.2, 4.5, false, st);
     const curb = this.mat({ color: "#8b8b86", roughness: 0.7 });
-    this.box(0.18, 0.2, 26, curb, 19.5, -0.2, 4.5, false, st);
-    this.box(0.18, 0.2, 60, curb, 28.5, -0.2, 4.5, false, st);
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(9, 90), lite ? new THREE.MeshLambertMaterial({ color: "#1d2125" }) : new THREE.MeshStandardMaterial({ color: "#1a1e22", roughness: 0.22, metalness: 0.35 }));
+    this.box(0.18, 0.2, STREET_LENGTH, curb, 19.5, -0.2, 4.5, false, st);
+    this.box(0.18, 0.2, STREET_LENGTH, curb, 28.5, -0.2, 4.5, false, st);
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(9, STREET_LENGTH), lite ? new THREE.MeshLambertMaterial({ map: this.kit.asphalt.map, color: "#45484b" }) : new THREE.MeshStandardMaterial({ map: this.kit.asphalt.map, color: "#45484b", roughness: 0.22, metalness: 0.35 }));
     road.rotation.x = -Math.PI / 2; road.position.set(24, -0.15, 4.5); st.add(road);
     const paint = new THREE.MeshBasicMaterial({ color: "#a8a597" });
-    for (let z = -40; z < 48; z += 4) { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 2), paint); m.rotation.x = -Math.PI / 2; m.position.set(24, -0.145, z); st.add(m); }
-    this.box(3, 0.2, 90, pave, 30, -0.2, 4.5, false, st);
+    for (let z = -175; z < 180; z += 4) { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 2), paint); m.rotation.x = -Math.PI / 2; m.position.set(24, -0.145, z); st.add(m); }
+    this.box(3, 0.2, STREET_LENGTH, pave, 30, -0.2, 4.5, false, st);
     for (let i = 0; i < 10; i++) {
       const puddle = new THREE.Mesh(new THREE.CircleGeometry(0.5 + Math.random() * 0.9, 24), lite ? new THREE.MeshLambertMaterial({ color: "#2a3338", transparent: true, opacity: 0.6 }) : new THREE.MeshStandardMaterial({ color: "#46545a", roughness: 0.02, metalness: 0.9, transparent: true, opacity: 0.55 }));
       puddle.rotation.x = -Math.PI / 2; puddle.scale.y = 0.5; puddle.position.set(20.5 + Math.random() * 7, -0.14, -6 + i * 2.4); st.add(puddle);
     }
     // fence along the far sidewalk
-    for (let z = -40; z < 50; z += 2.2) { this.box(0.05, 1.3, 0.05, metal, 31.3, 0, z, false, st); }
-    for (const y of [0.4, 1.2]) this.box(0.04, 0.05, 90, metal, 31.3, y, 5, false, st);
+    for (let z = -175; z < 180; z += 2.2) { this.box(0.05, 1.3, 0.05, metal, 31.3, 0, z, false, st); }
+    for (const y of [0.4, 1.2]) this.box(0.04, 0.05, STREET_LENGTH, metal, 31.3, y, 5, false, st);
     // street lamps with soft light cones and road reflections
     const cone = new THREE.MeshBasicMaterial({ color: "#ffcf8a", transparent: true, opacity: 0.07, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
     const glowTex = canvasTex(128, 128, (g) => { const r = g.createRadialGradient(64, 64, 0, 64, 64, 64); r.addColorStop(0, "rgba(255,200,130,0.8)"); r.addColorStop(1, "rgba(255,200,130,0)"); g.fillStyle = r; g.fillRect(0, 0, 128, 128); }, false);
@@ -1268,6 +1274,13 @@ export class Apartment {
     cat.group.position.set(17.55, 0.1, 6.55); cat.group.rotation.y = Math.PI / 2 + 0.5; st.add(cat.group);
     this.cats.push({ cat, yaw: cat.group.rotation.y });
     this.spot("cat-street", new THREE.Vector3(17.55, 0.4, 6.55), () => this.l("Погладить кошку", "Pet the cat"), () => this.departure === "street", () => this.petCat(), "street");
+    // Broad backing ground and matching sidewalks extend beyond all visible/driveable edges.
+    const backing = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), this.kit.concrete);
+    backing.rotation.x = -Math.PI / 2; backing.position.set(24, -0.22, 0); st.add(backing);
+    this.streetBoxes = this.boxes.splice(boxStart);
+    st.rotation.y = Math.PI / 2; st.position.set(STREET_OFFSET.x, 0, STREET_OFFSET.z); st.updateMatrixWorld(true);
+    for (const spot of this.spots.slice(spotStart)) spot.pos.copy(st.localToWorld(spot.pos.clone()));
+    this.seatEye.copy(st.localToWorld(this.seatEye.clone()));
   }
 
   private buildCar(parent: THREE.Object3D) {
@@ -1342,7 +1355,8 @@ export class Apartment {
   /** Which space the player stands in, so objects behind a wall never get focus. */
   private zone(): Zone {
     const { x, z } = this.pos;
-    if (x >= 16.1) return "street";
+    if (["road", "stalled", "walk"].includes(this.departure)) return "road";
+    if (["street", "car", "starting"].includes(this.departure)) return "street";
     if (z > 8.03 && x > 9.15) return "stairs";
     if (x > 9.05 && z <= 8.03) return "hall";
     return "apt";
@@ -1358,6 +1372,19 @@ export class Apartment {
       car: this.l("Завести машину", "Start the car"),
       starting: this.l(this.departureTime < 1.65 ? "Двигатель запускается…" : "Отъезд от дома…", this.departureTime < 1.65 ? "Engine starting…" : "Driving away…"),
     };
+    if (this.departure === "road") return this.l("Дорога к цирку · Следовать по шоссе", "Road to the circus · Follow the highway");
+    if (this.departure === "stalled" || this.departure === "walk") {
+      const task = roadTask(this.roadProgress());
+      const titles = {
+        crank: this.l("1 км до парка · Попробовать завести двигатель", "1 km to the park · Try restarting the engine"),
+        leaveCar: this.l("Выйти из машины", "Get out of the car"),
+        hood: this.l("Открыть капот и осмотреть двигатель", "Open the bonnet and check the engine"),
+        triangle: this.l("Взять знак в багажнике и поставить позади машины", "Take the triangle from the boot and place it behind the car"),
+        walk: this.l("Идти к остановке, затем по указателю в лес", "Walk to the bus stop, then follow the sign into the woods"),
+        gate: this.l("Открыть ворота и войти в парк", "Open the gate and enter the park"),
+      };
+      return titles[task];
+    }
     if (goals[this.departure]) return goals[this.departure];
     if (this.done.has("keys")) return this.l("Выйти из квартиры", "Leave the apartment");
     if (this.ready()) return this.l("Взять ключи у входной двери", "Take the keys by the front door");
@@ -1419,7 +1446,27 @@ export class Apartment {
   private hallOpen() { return this.departure === "landing" || this.departure === "ground" || (this.departure === "stairs" && this.floor === START_FLOOR); }
   private blocked(x: number, z: number) {
     const d = this.departure;
-    if (d === "car" || d === "starting" || this.finished || this.transition) return true;
+    if (["car", "starting", "road", "stalled"].includes(d) || this.finished || this.transition) return true;
+    if (d === "walk") {
+      const lx = x - ROAD_ORIGIN.x, lz = z - ROAD_ORIGIN.z;
+      if (!walkable(lx, lz, this.gateAngle > 0.8)) return true;
+      if (!canHeadOff(this.roadProgress()) && lz < HEAD_OFF_Z) return true;
+      const local = new THREE.Vector3(x, 0, z); this.car.group.worldToLocal(local);
+      return Math.abs(local.x) < this.car.half[0] + R && Math.abs(local.z) < this.car.half[1] + R;
+    }
+    if (d === "street") {
+      const p = worldToStreet(x, z);
+      if (!inStreet(p.x, p.z)) return true;
+      for (const [a, b, c, e] of this.streetBoxes) if (p.x > a - R && p.x < c + R && p.z > b - R && p.z < e + R) return true;
+      for (const f of this.streetLife.obstacles?.() ?? []) if (f && p.x > f[0] - R && p.x < f[2] + R && p.z > f[1] - R && p.z < f[3] + R) return true;
+      return false;
+    }
+    if (d === "ground" && z < 3.28 && x > 11.94 && x < 13.66) {
+      if (x < 12.25 || x > 13.35 || z < 0.95) return true;
+      if (z > 2.72 && this.exitOpen < 0.8) return true;
+      if (z < 1.68 && this.outerOpen < 0.8) return true;
+      return false;
+    }
     if (x > 8.9 && x < 16.2 && z < 3.28 && z > 2.72) return true; // closed lift doors
     if (x > 15.7 && x < 16.6) return true; // building wall / exit door (opened by interaction only)
     if (d !== "apartment" && x < 9.35 && z < 7.9) return true; // own apartment closed behind us
@@ -1460,7 +1507,7 @@ export class Apartment {
   };
 
   private update(dt: number) {
-    const seated = this.departure === "car" || this.departure === "starting";
+    const seated = ["car", "starting", "road", "stalled"].includes(this.departure);
     if (!seated && (this.touch.lookX || this.touch.lookY)) { this.look(this.touch.lookX, this.touch.lookY, 0.006); this.touch.lookX = this.touch.lookY = 0; }
     const k = this.keys;
     const rawX = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0) + this.touch.mx;
@@ -1477,7 +1524,7 @@ export class Apartment {
     if (!this.blocked(nx, this.pos.z)) this.pos.x = nx;
     if (!this.blocked(this.pos.x, nz)) this.pos.z = nz;
     // Each crossing wraps to the adjacent identical landing and changes exactly one floor.
-    if (!seated && this.pos.z > 9.3 && this.pos.x < 16) {
+    if (!seated && (this.departure === "stairs" || this.departure === "landing") && this.pos.z > 9.3 && this.pos.x < 16) {
       if (oldX >= 11.2 && this.pos.x < 11.2) {
         if (!this.changeFloor(-1)) this.pos.x = oldX;
       } else if (oldX < 11.2 && this.pos.x >= 11.2) {
@@ -1489,6 +1536,14 @@ export class Apartment {
     }
     if (this.departure === "landing" && this.pos.z > 8.3) {
       this.advanceDeparture("enterStairs"); this.caption("Седьмой этаж. Пешком… Только бы свет не погас.", "Seventh floor. On foot… just don't let the lights go out.");
+    }
+    if (this.departure === "ground" && this.outerOpen > 0.8 && this.pos.z < 1.2) {
+      this.advanceDeparture("leaveBuilding");
+      this.rain.mesh.visible = false;
+      this.caption("Моя машина у фонаря. Ключи со мной.", "My car is under the streetlight. I've got the keys.");
+    }
+    if (this.departure === "walk" && this.gateAngle > 0.8 && this.pos.z < GATE[1] - 0.8) {
+      this.advanceDeparture("enterPark");
     }
     const moved = Math.hypot(this.pos.x - oldX, this.pos.z - oldZ) > 0.0001;
     const moving = len > 0.1 && !seated && moved;
@@ -1504,13 +1559,14 @@ export class Apartment {
       if (Math.abs(this.pos.y - gy) > 0.5) this.pos.y = gy;
       this.camera.position.set(this.pos.x, this.pos.y + EYE + bob, this.pos.z);
     }
-    this.camera.rotation.set(this.pitch, this.yaw, 0);
+    this.camera.rotation.set(this.pitch, this.yaw + (seated ? this.carYaw : 0), 0);
 
     // focus the nearest usable object in front of the camera
     const fwd = new THREE.Vector3();
     this.camera.getWorldDirection(fwd);
     this.focus = null;
     let best = 0.86;
+    this.syncCarSpots();
     if (this.reading && this.pos.distanceTo(this.reading.at) > 1.1) this.reading = null;
     const zone = this.zone();
     for (const s of this.spots) {
@@ -1518,16 +1574,16 @@ export class Apartment {
       if (s.zone && s.zone !== zone) continue;
       const to = s.pos.clone().sub(this.camera.position);
       const d = to.length();
-      if (d > 2.2) continue;
+      if (d > (s.id === "gate" ? 3 : 2.2)) continue;
       const dot = to.normalize().dot(fwd);
       if (dot > best) { best = dot; this.focus = s; }
     }
   }
 
-  /** Ignition, a gentle pull-away and an exterior chase shot, then fade into the pictured intro. */
+  /** Ignition, a gentle pull-away and an exterior chase shot, then fade onto the forest road. */
   private updateDrive(t: number) {
     if (this.departure === "done") { this.fade = 1; return; }
-    if (this.departure !== "starting") { this.fade = 0; this.driveDistance = 0; return; }
+    if (this.departure !== "starting") { this.fade = 0; return; }
     const time = this.departureTime;
     const smooth = (a: number, b: number, v: number) => {
       const x = THREE.MathUtils.clamp((v - a) / (b - a), 0, 1);
@@ -1546,9 +1602,9 @@ export class Apartment {
     // Begin in the driver's seat, then pull outside to show the car actually leaving.
     const seat = car.group.localToWorld(car.driverEye.clone());
     seat.y += Math.sin(t * 35) * 0.003 * (1 - smooth(1.2, 2.5, time));
-    const chase = new THREE.Vector3(car.group.position.x + 4.3, 2.35, car.group.position.z + 6.4);
+    const chase = this.street.localToWorld(new THREE.Vector3(car.group.position.x + 4.3, 2.35, car.group.position.z + 6.4));
     this.camera.position.lerpVectors(seat, chase, smooth(1.15, 2.65, time));
-    this.camera.lookAt(car.group.position.x, 0.72, car.group.position.z - 2.1);
+    this.camera.lookAt(this.street.localToWorld(new THREE.Vector3(car.group.position.x, 0.72, car.group.position.z - 2.1)));
     this.streetRain.uniforms.uCenter.value.set(car.group.position.x, 2, car.group.position.z - 3);
     this.fade = smooth(8.05, 9.25, time);
     if (time > 1.8 && !this.done.has("driveAway")) {
@@ -1560,8 +1616,7 @@ export class Apartment {
       this.caption("Двор исчез в зеркале. Теперь только дорога и дождь.", "The courtyard vanishes behind me. Only the road and the rain remain.");
     }
     if (time > 9.4) {
-      // The forest-road segment is not wired in yet, so pass straight through its stages to the park.
-      for (const a of ["engineReady", "stall", "leaveCar", "enterPark"] as const) this.advanceDeparture(a);
+      this.beginRoad();
     }
   }
 
@@ -1572,6 +1627,7 @@ export class Apartment {
     this.stairDoor.rotation.y = this.stairDoorOpen * 1.5;
     this.stairLight.intensity = (this.isTouch ? 2.4 : 4) * (Math.random() < 0.015 ? 0.25 : 1);
     this.updateDrive(t);
+    if (active) this.updateRoad(dt, t);
     if (this.transition) {
       const tr = this.transition; tr.t += dt;
       const k = tr.t < 0.7 ? THREE.MathUtils.smoothstep(tr.t, 0.15, 0.65) : 1 - THREE.MathUtils.smoothstep(tr.t, 0.95, 1.5);
@@ -1599,7 +1655,8 @@ export class Apartment {
     });
     // TV
     if (this.tvOn) {
-      const g = (this.tvScreen.image as HTMLCanvasElement).getContext("2d")!;
+      const g = (this.tvScreen.image as HTMLCanvasElement).getContext("2d");
+      if (!g) return;
       g.fillStyle = "#1a2a48"; g.fillRect(0, 0, 256, 192);
       g.fillStyle = "#2a3e68"; g.fillRect(0, 130, 256, 62);
       g.fillStyle = "#c9b089"; g.beginPath(); g.ellipse(128, 92, 30, 36, 0, 0, 7); g.fill();
@@ -1611,7 +1668,8 @@ export class Apartment {
       this.tvScreen.needsUpdate = true;
       this.tvLight.intensity = 2.2 * (0.8 + Math.random() * 0.3);
     } else if (this.tvLight.intensity > 0) {
-      const g = (this.tvScreen.image as HTMLCanvasElement).getContext("2d")!;
+      const g = (this.tvScreen.image as HTMLCanvasElement).getContext("2d");
+      if (!g) return;
       g.fillStyle = "#0a0c0c"; g.fillRect(0, 0, 256, 192); this.tvScreen.needsUpdate = true; this.tvLight.intensity = 0;
     }
     this.led.color.set(!this.done.has("phone") && Math.sin(t * 6) > 0 ? "#ff2010" : "#300404");
@@ -1627,8 +1685,9 @@ export class Apartment {
     const w = this.windNow = updateWind(t);
     const d = this.departure;
     const outside = d === "apartment" || d === "landing";
+    this.street.visible = ["ground", "street", "car", "starting"].includes(d);
     this.yard.group.visible = outside && !this.street.visible;
-    this.sky.mesh.visible = this.yard.group.visible || this.street.visible;
+    this.sky.mesh.visible = this.yard.group.visible || this.street.visible || Boolean(this.road?.group.visible);
     this.sky.mesh.position.copy(this.camera.position);
     this.sky.uniforms.uTime.value = t; this.sky.uniforms.uFlash.value = fl;
     if (this.yard.group.visible) {
@@ -1636,7 +1695,7 @@ export class Apartment {
       this.yardRain.uniforms.uTime.value = t; this.yardRain.uniforms.uFlash.value = fl * 0.4;
     }
     if (this.street.visible) {
-      this.streetLife.update(dt, { flash: fl, wind: w, t, player: this.pos, allowTraffic: d === "street" });
+      this.streetLife.update(dt, { flash: fl, wind: w, t, player: this.street.worldToLocal(this.pos.clone()), allowTraffic: d === "street" });
       if (this.badLamp) {
         this.badLampT -= dt;
         if (this.badLampT <= 0) this.badLampT = Math.random() < 0.12 ? 0.6 + Math.random() * 0.8 : 0.08;
@@ -1646,7 +1705,7 @@ export class Apartment {
       }
     }
     // weather sounds: muffled indoors, full force in the street
-    const street = this.street.visible;
+    const street = this.street.visible || Boolean(this.road?.group.visible);
     this.sfx.setWind((street ? 0.11 : d === "apartment" ? 0.025 : 0.012) * w);
     this.sfx.setRain(street ? 0.34 : d === "apartment" ? 0.22 : 0.1);
     // cats: tail sways, head follows the player when close
@@ -1689,7 +1748,134 @@ export class Apartment {
     if (this.floor === 1 && this.strollerAmp > 0.6 && this.zone() === "hall" && Math.random() < dt * 0.25) this.sfx.creak(0.015);
     // street door: leaves swing open into the vestibule while leaving
     this.exitOpen = THREE.MathUtils.damp(this.exitOpen, this.exitOpening ? 1 : 0, 4, dt);
+    this.outerOpen = THREE.MathUtils.damp(this.outerOpen, this.outerOpening ? 1 : 0, 4, dt);
+    this.outerDoor.rotation.y = this.outerOpen * 1.45;
     this.exitDoors.forEach((p, i) => { p.rotation.y = (i === 0 ? 1 : -1) * this.exitOpen * 1.25; });
+  }
+
+  private roadProgress() {
+    return { cranks: this.cranks, outside: this.departure === "walk", hood: this.done.has("engineChecked"), triangle: this.trianglePlaced,
+      atGate: Boolean(this.road) && Math.hypot(this.pos.x - ROAD_ORIGIN.x - GATE[0], this.pos.z - GATE[1]) < 7 };
+  }
+
+  private beginRoad() {
+    this.road = buildRoad(this.kit, this.isTouch, this.lang); this.scene.add(this.road.group);
+    this.carFit = fitCar(this.car, this.kit, this.drops);
+    this.car.group.removeFromParent(); this.road.group.add(this.car.group); this.road.group.visible = true;
+    this.street.visible = false; this.yard.group.visible = false; this.rain.mesh.visible = false;
+    const fog = this.scene.fog as THREE.Fog; fog.near = 18; fog.far = 155;
+    this.advanceDeparture("engineReady"); this.roadSpeed = CRUISE; this.roadDriven = 0;
+    this.yaw = 0; this.pitch = -0.08;
+    this.setupRoadSpots(); this.placeRoadCar();
+    this.caption("За городом фонари кончились. Впереди указатель на «Весёлые Горки».", "The town lights are gone. Ahead, a sign for Happy Hills.");
+  }
+
+  private placeRoadCar() {
+    if (!this.road) return;
+    const pose = this.road.pose(this.roadDriven, this.roadLateral);
+    this.car.group.position.copy(pose.pos); this.car.group.position.y = 0.035;
+    this.car.group.rotation.y = pose.yaw; this.carYaw = pose.yaw;
+    this.car.group.updateMatrixWorld(true);
+    this.seatEye.copy(this.car.group.localToWorld(this.car.driverEye.clone()));
+    if (this.departure === "road" || this.departure === "stalled") {
+      this.pos.copy(this.seatEye); this.pos.y = 0;
+      this.camera.position.copy(this.seatEye); this.camera.rotation.set(this.pitch, this.yaw + this.carYaw, 0);
+    }
+    this.syncCarSpots();
+  }
+
+  private syncCarSpots() {
+    for (const { spot, local } of this.carSpots) spot.pos.copy(this.car.group.localToWorld(local.clone()));
+  }
+
+  private setupRoadSpots() {
+    const carSpot = (id: string, local: THREE.Vector3, label: () => string, ok: () => boolean, use: () => void) => {
+      this.spot(id, local.clone(), label, ok, use, "road");
+      const spot = this.spots.at(-1); if (spot) this.carSpots.push({ spot, local });
+    };
+    const outside = () => this.departure === "walk";
+    const seated = () => this.departure === "road" || this.departure === "stalled";
+    carSpot("restart", this.car.ignition, () => this.l("Попробовать завести двигатель", "Try restarting the engine"), () => this.departure === "stalled" && this.restartT <= 0, () => {
+      if (this.batteryDead) { this.sfx.click(); this.caption("Только щелчок. Аккумулятор сел.", "Just a click. The battery is flat."); return; }
+      this.cranks++; this.restartT = 1.5; this.sfx.crank(this.cranks >= BATTERY_DIES_ON);
+      if (this.cranks >= BATTERY_DIES_ON) { this.batteryDead = true; this.wipers = false; this.car.gauges.color.set("#342b20"); setCarLights(this.car, false, 0); }
+      this.caption(this.batteryDead ? "Стартер замер. Аккумулятор сел — нужно выйти." : "Стартер крутит, но двигатель не схватывает. Проверю под капотом.", this.batteryDead ? "The starter stops. Flat battery — time to get out." : "The starter turns, but the engine won't catch. Better check under the bonnet.");
+    });
+    carSpot("getOut", new THREE.Vector3(-0.79, 0.98, 0.12), () => this.l("Выйти из машины", "Get out of the car"), () => this.departure === "stalled" && this.restartT <= 0 && canLeaveCar(this.roadProgress()), () => {
+      this.advanceDeparture("leaveCar"); this.sfx.door();
+      this.pos.copy(this.car.group.localToWorld(new THREE.Vector3(-1.45, 0, 0.15))); this.pos.y = 0;
+      this.yaw = this.carYaw - Math.PI / 2; this.pitch = -0.15; this.flashOn = true; this.hazard = !this.batteryDead;
+      this.caption("Сначала двигатель. Потом знак аварийной остановки из багажника.", "First the engine. Then the warning triangle from the boot.");
+    });
+    carSpot("hazards", new THREE.Vector3(0.05, 0.9, -0.65), () => this.l("Аварийная сигнализация", "Hazard lights"), seated, () => { this.hazard = !this.hazard; this.sfx.click(); });
+    carSpot("wipers", new THREE.Vector3(-0.58, 0.87, -0.62), () => this.l("Дворники", "Wipers"), () => seated() && !this.batteryDead, () => { this.wipers = !this.wipers; this.sfx.click(); });
+    carSpot("radio", new THREE.Vector3(0.35, 0.87, -0.64), () => this.l("Настроить радио", "Tune the radio"), seated, () => {
+      this.radioStep++; this.sfx.static();
+      this.caption(this.radioStep % 2 ? "Сквозь помехи: «…дорога к парку закрыта…»" : "Вместо станции — несколько нот старой карусели.", this.radioStep % 2 ? "Through the static: ‘…the road to the park is closed…’" : "Instead of a station, a few notes from an old carousel.");
+    });
+    carSpot("hood", new THREE.Vector3(0, 0.88, -2.1), () => this.l(this.hoodUp ? "Закрыть капот" : "Открыть капот и проверить двигатель", this.hoodUp ? "Close the bonnet" : "Open the bonnet and check the engine"), outside, () => {
+      this.hoodUp = !this.hoodUp; this.sfx.clunk();
+      if (this.hoodUp) { this.done.add("engineChecked"); this.caption("Запах перегретой проводки. Ремня не видно, из-под капота идёт пар. В темноте не починить.", "A smell of burnt wiring. No belt in sight, steam under the bonnet. I can't fix this in the dark."); }
+    });
+    carSpot("trunk", new THREE.Vector3(0, 0.85, 2.15), () => this.l(this.trunkUp ? "Закрыть багажник" : "Открыть багажник", this.trunkUp ? "Close the boot" : "Open the boot"), outside, () => { this.trunkUp = !this.trunkUp; this.sfx.clunk(); });
+    this.trunkTriangle = new THREE.Group();
+    const red = new THREE.MeshBasicMaterial({ color: "#bc3022" });
+    const caseMesh = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.06, 0.12), red); this.trunkTriangle.add(caseMesh);
+    this.trunkTriangle.position.set(0, 0.87, 1.7); this.car.group.add(this.trunkTriangle); this.trunkTriangle.visible = false;
+    carSpot("takeTriangle", new THREE.Vector3(0, 0.9, 1.7), () => this.l("Взять аварийный знак", "Take the warning triangle"), () => outside() && this.trunkUp && !this.holdingTriangle && !this.trianglePlaced && this.done.has("engineChecked"), () => { this.holdingTriangle = true; this.sfx.pickup(); this.caption("Знак нужно поставить позади машины, чтобы меня заметили заранее.", "Put the triangle behind the car so approaching drivers can see it in time."); });
+    carSpot("placeTriangle", new THREE.Vector3(0, 0.4, 16), () => this.l("Поставить аварийный знак", "Place the warning triangle"), () => outside() && this.holdingTriangle, () => {
+      this.holdingTriangle = false; this.trianglePlaced = true; this.sfx.clunk();
+      this.road.group.add(this.road.triangle); this.road.triangle.position.copy(this.car.group.localToWorld(new THREE.Vector3(0, 0, 16))).sub(ROAD_ORIGIN); this.road.triangle.position.y = 0.04; this.road.triangle.rotation.y = this.carYaw;
+      this.caption("Машину видно. До парка около километра. У остановки должна быть тропа.", "The car is marked. About a kilometre to the park. There should be a trail by the bus stop.");
+    });
+    const noteIds = ["timetable", "missing", "watchman", "poster", "ticket"] as const;
+    for (const id of noteIds) {
+      const at = this.road.spots[id]; if (!at) continue;
+      this.spot(id, at.clone().add(ROAD_ORIGIN), () => this.l(id === "ticket" ? "Поднять старый билет" : "Прочитать", id === "ticket" ? "Pick up the old ticket" : "Read"), outside, () => this.read(NOTICES[id].title[this.lang], NOTICES[id].body[this.lang]), "road");
+    }
+    const inspections = {
+      kmSign: ["Осмотреть указатель", "Inspect the sign", "Весёлые Горки — 1 км. Другого жилья поблизости нет.", "Happy Hills — 1 km. No other houses nearby."],
+      fork: ["Осмотреть тропу", "Inspect the trail", "Следы ведут налево. По шоссе дальше не пройти — упало дерево.", "Footprints lead left. A fallen tree blocks the highway ahead."],
+      fallenTree: ["Осмотреть упавшее дерево", "Inspect the fallen tree", "Свежий разлом. Перелезать через мокрые ветки опасно. Вернусь к тропе.", "A fresh break. Climbing the wet branches is dangerous. Back to the trail."],
+      sandal: ["Осмотреть детский сандалик", "Inspect the child's sandal", "Маленький сандалик. Изнутри сухой — будто оставили только что.", "A tiny sandal. Dry inside — as if just left here."],
+      horse: ["Осмотреть лошадку", "Inspect the carousel horse", "Старая карусельная лошадка. На боку нацарапано: «Т. Ч.»", "An old carousel horse. ‘T. C.’ scratched on its side."],
+      chain: ["Осмотреть замок", "Inspect the padlock", "Дужка сломана. Ворота не заперты.", "The shackle is broken. The gate is unlocked."],
+    };
+    for (const [id, lines] of Object.entries(inspections)) {
+      const at = this.road.spots[id]; if (!at) continue;
+      this.spot(id, at.clone().add(ROAD_ORIGIN), () => this.l(lines[0], lines[1]), outside, () => this.caption(lines[2], lines[3]), "road");
+    }
+    this.spot("payphone", this.road.spots.payphone.clone().add(ROAD_ORIGIN), () => this.l("Снять трубку", "Pick up the handset"), outside, () => {
+      this.phoneAnswered = !this.phoneAnswered; this.road.handset.rotation.z = this.phoneAnswered ? -0.8 : 0; this.sfx.click();
+      this.caption(this.phoneAnswered ? "«Не по дороге. Через лес. Он слышит мотор». Потом короткие гудки." : "Трубка на рычаге. Телефон больше не звонит.", this.phoneAnswered ? "‘Not the road. Through the woods. He hears the engine.’ Then a busy tone." : "The handset is back on its hook. No more ringing.");
+    });
+    this.spot("gate", this.road.spots.gate.clone().add(ROAD_ORIGIN), () => this.l("Толкнуть ворота", "Push the gate"), () => outside() && canHeadOff(this.roadProgress()) && !this.gateOpening, () => { this.gateOpening = true; this.sfx.gate(); this.caption("Ворота поддались. Из-за деревьев слышна музыка.", "The gate gives way. Music drifts through the trees."); }, "road");
+  }
+
+  private updateRoad(dt: number, t: number) {
+    if (!this.road?.group.visible) return;
+    this.restartT = Math.max(0, this.restartT - dt);
+    if (this.departure === "road") {
+      if (this.roadDriven >= SPUTTER_AT && !this.done.has("sputter")) { this.done.add("sputter"); this.sfx.sputter(); this.caption("До парка километр… Что с двигателем?", "One kilometre to the park… What's wrong with the engine?"); }
+      if (this.roadDriven >= DIE_AT && !this.engineDead) { this.engineDead = true; this.engine?.stop(); this.engine = null; this.sfx.sputter(); this.caption("Двигатель заглох. Качусь к обочине.", "The engine died. Coasting onto the shoulder."); }
+      if (this.engineDead) this.roadSpeed = Math.sqrt(Math.max(0, 2 * (CRUISE * CRUISE / (2 * (STOP_AT - DIE_AT))) * (STOP_AT - this.roadDriven)));
+      this.roadDriven = Math.min(STOP_AT, this.roadDriven + this.roadSpeed * dt);
+      if (this.engineDead) this.roadLateral = THREE.MathUtils.lerp(1.8, STOP_LATERAL, THREE.MathUtils.smoothstep(this.roadDriven, DIE_AT, STOP_AT));
+      this.placeRoadCar();
+      this.car.wheels.forEach(w => { w.rotation.x = -this.roadDriven / 0.33; });
+      if (this.roadDriven >= STOP_AT - 0.02) { this.roadDriven = STOP_AT; this.roadSpeed = 0; this.placeRoadCar(); this.advanceDeparture("stall"); this.caption("Машина остановилась. Попробую ещё раз повернуть ключ.", "The car stops. I'll try the key once more."); }
+    }
+    this.hoodAngle = THREE.MathUtils.damp(this.hoodAngle, this.hoodUp ? 1 : 0, 4, dt);
+    this.trunkAngle = THREE.MathUtils.damp(this.trunkAngle, this.trunkUp ? 1 : 0, 4, dt);
+    this.car.hood.rotation.x = -this.hoodAngle * 1.15; this.car.trunk.rotation.x = this.trunkAngle * 1.1;
+    this.trunkTriangle.visible = this.trunkUp && !this.holdingTriangle && !this.trianglePlaced;
+    this.gateAngle = THREE.MathUtils.damp(this.gateAngle, this.gateOpening ? 1 : 0, 3, dt);
+    if (this.carFit?.update(dt, t, { wipers: this.wipers, hazard: this.hazard && !this.batteryDead, steam: this.engineDead ? 0.8 : 0, hoodOpen: this.hoodAngle })) this.sfx.wiper();
+    this.road.update(dt, { t, flash: this.lightning.flash ?? 0, camLocal: this.camera.position.clone().sub(ROAD_ORIGIN), gateOpen: this.gateAngle });
+    if (this.departure === "walk") {
+      this.owlT -= dt; if (this.owlT <= 0) { this.owlT = 18 + Math.random() * 12; this.sfx.owl(); }
+      if (!this.phoneAnswered && Math.hypot(this.pos.x - ROAD_ORIGIN.x - 7.8, this.pos.z + 32) < 16) { this.phoneT -= dt; if (this.phoneT <= 0) { this.phoneT = 5; this.sfx.ring(); } }
+    }
   }
 
   dispose() {
